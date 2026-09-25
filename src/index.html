@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>JobFinder | Smart Job Alerts Dashboard</title>
+  <meta name="description" content="Minimalist, modern job scraping dashboard powered by PhantomBuster, n8n, and Telegram.">
+  <link rel="stylesheet" href="./css/styles.css">
+</head>
+<body class="dashboard-body">
+
+  <!-- Mobile Top Bar Header -->
+  <header class="mobile-top-bar">
+    <div class="mobile-brand">
+      <span class="brand-logo-icon small">💼</span>
+      <span class="mobile-title">JobFinder</span>
+    </div>
+    <div class="top-status-pill mobile-pill" id="system-status-mobile">
+      <span class="status-dot"></span> Alerts ready
+    </div>
+  </header>
+
+  <div class="app-layout">
+    
+    <!-- 1. Desktop Left Sidebar Navigation -->
+    <aside class="sidebar-desktop">
+      <div class="sidebar-brand">
+        <div class="brand-logo-icon">💼</div>
+        <span class="brand-name">JobFinder</span>
+      </div>
+
+      <nav class="sidebar-menu">
+        <a href="#dashboard" class="menu-item active">
+          <span class="menu-icon">🏠</span>
+          <span class="menu-label">Dashboard</span>
+        </a>
+        <a href="#settings" class="menu-item">
+          <span class="menu-icon">⚙️</span>
+          <span class="menu-label">Settings</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-bottom-promo">
+        <div class="promo-badge-icon">🎯</div>
+        <h4>Better Jobs<br>Bigger Dreams</h4>
+        <p>Let's help you find the right opportunity!</p>
+      </div>
+    </aside>
+
+    <!-- 2. Main Workspace Container -->
+    <main class="main-workspace">
+
+      <!-- Desktop Top Status Header -->
+      <header class="desktop-top-header">
+        <div class="top-tagline">
+          <span class="sparkle-icon">✨</span> Your job search, your way
+        </div>
+        <div class="top-status-pill" id="system-status">
+          <span class="status-dot"></span> Alerts ready
+        </div>
+      </header>
+
+      <!-- Main Form Container Card -->
+      <div class="main-card-container">
+
+        <!-- Hero Section Inside Card -->
+        <section class="card-hero-banner">
+          <div class="hero-icon-box">💼</div>
+          <div class="hero-text-content">
+            <h2>Find Your Next Job</h2>
+            <p>Set your preferences and get the best job matches directly on Telegram.</p>
+          </div>
+        </section>
+
+        <!-- Alert Banner -->
+        <div id="alert-banner" class="alert-banner"></div>
+
+        <!-- Preferences Form -->
+        <form id="preference-form" novalidate>
+          <div class="form-grid-layout">
+
+            <!-- Left Sub-column -->
+            <div class="form-col">
+              <!-- Keywords -->
+              <div class="form-group">
+                <label for="job_keywords" class="form-label">🔍 Keywords <span class="required-star">*</span></label>
+                <input type="text" id="job_keywords" class="form-control" placeholder="e.g. Software Developer, Data Analyst..." required>
+                <div class="chips-group">
+                  <button type="button" class="chip-btn" data-value="Generative AI Intern">Generative AI Intern</button>
+                  <button type="button" class="chip-btn" data-value="Software Developer">Software Developer</button>
+                  <button type="button" class="chip-btn" data-value="Data Analyst">Data Analyst</button>
+                </div>
+              </div>
+
+              <!-- Experience Level -->
+              <div class="form-group">
+                <label for="experience_level" class="form-label">🎓 Experience Level <span class="required-star">*</span></label>
+                <select id="experience_level" class="form-control" required>
+                  <option value="" disabled selected>Select experience level</option>
+                  <option value="Internship">Internship</option>
+                  <option value="Fresher">Fresher / Entry Level</option>
+                  <option value="Experienced">Experienced (Mid/Senior)</option>
+                </select>
+              </div>
+
+              <!-- Work Type -->
+              <div class="form-group">
+                <label class="form-label">🏢 Work Type <span class="required-star">*</span></label>
+                <div class="checkbox-pills-row" id="work_type_group">
+                  <label class="custom-checkbox-pill">
+                    <input type="checkbox" name="work_type" value="Remote" checked>
+                    <span>Remote</span>
+                  </label>
+                  <label class="custom-checkbox-pill">
+                    <input type="checkbox" name="work_type" value="Hybrid" checked>
+                    <span>Hybrid</span>
+                  </label>
+                  <label class="custom-checkbox-pill">
+                    <input type="checkbox" name="work_type" value="On-site" checked>
+                    <span>On-site</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Job Posted Within -->
+              <div class="form-group">
+                <label for="job_posting_time" class="form-label">⏱️ Job Posted Within <span class="required-star">*</span></label>
+                <select id="job_posting_time" class="form-control" required>
+                  <option value="any" selected>Any time</option>
+                  <option value="r86400">Last 24 hours</option>
+                  <option value="r43200">Last 12 hours</option>
+                  <option value="r21600">Last 6 hours</option>
+                  <option value="r3600">Last 1 hour</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Right Sub-column -->
+            <div class="form-col">
+              <!-- Location Multi-Select -->
+              <div class="form-group">
+                <label class="form-label">📍 Location <span class="required-star">*</span></label>
+                <div class="location-select-container" id="location-select-container">
+                  <div class="location-input-wrapper" id="location-input-wrapper" tabindex="0">
+                    <div class="selected-location-chips" id="selected-location-chips"></div>
+                    <input type="text" id="location-search-input" class="location-search-input" placeholder="Select locations (multiple allowed)" autocomplete="off">
+                    <span class="dropdown-chevron">▼</span>
+                  </div>
+                  
+                  <!-- Hidden input storing comma-separated location string -->
+                  <input type="hidden" id="location" name="location" value="Delhi">
+
+                  <!-- Location Options Dropdown -->
+                  <div class="location-dropdown-menu" id="location-dropdown-menu">
+                    <div class="dropdown-header">
+                      <span>Search cities...</span>
+                      <div class="btn-group">
+                        <button type="button" class="btn-text-action" id="select-all-locs-btn">Select All</button>
+                        <button type="button" class="btn-text-action" id="clear-all-locs-btn">Clear</button>
+                      </div>
+                    </div>
+                    <div class="dropdown-options-list" id="location-options-list"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Job Type -->
+              <div class="form-group">
+                <label class="form-label">💼 Job Type <span class="required-star">*</span></label>
+                <div class="checkbox-pills-row grid-2col">
+                  <label class="custom-checkbox-pill">
+                    <input type="checkbox" id="job_type_full" name="job_type_options" value="Full-time" checked>
+                    <span>Full-time</span>
+                  </label>
+                  <label class="custom-checkbox-pill">
+                    <input type="checkbox" id="job_type_part" name="job_type_options" value="Part-time">
+                    <span>Part-time</span>
+                  </label>
+                  <label class="custom-checkbox-pill">
+                    <input type="checkbox" id="job_type_contract" name="job_type_options" value="Contract">
+                    <span>Contract</span>
+                  </label>
+                  <label class="custom-checkbox-pill">
+                    <input type="checkbox" id="job_type_intern" name="job_type_options" value="Internship">
+                    <span>Internship</span>
+                  </label>
+                </div>
+                <!-- Hidden input for job_type string compatibility -->
+                <input type="hidden" id="job_type" value="Full-time">
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Full Width Field: Telegram Chat ID -->
+          <div class="form-group full-width-group">
+            <label for="telegram_chat_id" class="form-label">🚀 Telegram Chat ID <span class="required-star">*</span></label>
+            <input type="text" id="telegram_chat_id" class="form-control" placeholder="Enter your Telegram Chat ID" required>
+            <span class="input-hint">You'll receive job alerts on this chat. Send <code>/start</code> to <code>@userinfobot</code> in Telegram to find your Chat ID.</span>
+          </div>
+
+          <!-- Submit Button -->
+          <div class="form-action">
+            <button type="submit" class="btn-gradient-submit">
+              <span class="btn-icon">✈️</span> Save Preferences &amp; Start <span class="arrow">➔</span>
+            </button>
+          </div>
+        </form>
+
+      </div>
+
+      <!-- Hidden containers preserving background JS operations -->
+      <div style="display:none;" aria-hidden="true">
+        <div id="preferences-list"></div>
+        <div id="status-widget"></div>
+        <table><tbody id="history-table-body"></tbody></table>
+      </div>
+
+    </main>
+
+  </div>
+
+  <!-- Mobile Bottom Navigation Bar -->
+  <nav class="mobile-bottom-nav">
+    <a href="#" class="mobile-tab active">
+      <span class="tab-icon">🏠</span>
+      <span class="tab-label">Dashboard</span>
+    </a>
+    <a href="#" class="mobile-tab">
+      <span class="tab-icon">⚙️</span>
+      <span class="tab-label">Settings</span>
+    </a>
+  </nav>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

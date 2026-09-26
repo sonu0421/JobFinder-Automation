@@ -216,6 +216,112 @@ function getSelectedJobTypes() {
   return values.length > 0 ? values.join(', ') : 'Full-time';
 }
 
+// --- SweetAlert2 Configuration & Helper Functions ---
+let isLoading = false;
+let loadingStartTime = 0;
+let tenSecTimer = null;
+
+const swalCustomClass = {
+  popup: 'jobfinder-swal-popup',
+  title: 'jobfinder-swal-title',
+  htmlContainer: 'jobfinder-swal-html',
+  confirmButton: 'jobfinder-swal-confirm'
+};
+
+function showLoadingAlert() {
+  isLoading = true;
+  loadingStartTime = Date.now();
+
+  Swal.fire({
+    title: 'Saving Your Preferences',
+    text: 'Please wait while we update your settings...',
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    showConfirmButton: false,
+    customClass: swalCustomClass,
+    didOpen: () => {
+      Swal.showLoading();
+    }
+  });
+
+  if (tenSecTimer) clearTimeout(tenSecTimer);
+
+  tenSecTimer = setTimeout(() => {
+    if (isLoading && Swal.isVisible()) {
+      Swal.update({
+        title: 'Still working on it...',
+        text: "This is taking a bit longer than usual. Please don't close this window."
+      });
+    }
+  }, 10000);
+}
+
+async function ensureMinimumLoadingTime() {
+  if (tenSecTimer) {
+    clearTimeout(tenSecTimer);
+    tenSecTimer = null;
+  }
+
+  const elapsed = Date.now() - loadingStartTime;
+  const remaining = Math.max(0, 500 - elapsed);
+
+  if (remaining > 0) {
+    await new Promise((resolve) => setTimeout(resolve, remaining));
+  }
+
+  isLoading = false;
+}
+
+function showSuccessAlert(title = 'Saved Successfully!', text = 'Your settings have been updated.') {
+  Swal.fire({
+    icon: 'success',
+    title,
+    text,
+    customClass: swalCustomClass,
+    confirmButtonText: 'OK'
+  });
+}
+
+function showWarningAlert(title = 'Validation Warning', text = 'Please fill in all required fields.') {
+  Swal.fire({
+    icon: 'warning',
+    title,
+    text,
+    customClass: swalCustomClass,
+    confirmButtonText: 'OK'
+  });
+}
+
+function showErrorAlert(title = 'Something Went Wrong!', text = 'Please try again later.') {
+  Swal.fire({
+    icon: 'error',
+    title,
+    text,
+    customClass: swalCustomClass,
+    confirmButtonText: 'OK'
+  });
+}
+
+function showNetworkErrorAlert(title = 'Connection Failed', text = 'Please check your internet connection.') {
+  Swal.fire({
+    icon: 'error',
+    title,
+    text,
+    customClass: swalCustomClass,
+    confirmButtonText: 'OK'
+  });
+}
+
+function showRateLimitAlert(title = 'Too Many Requests', text = 'Please wait 5 minutes and try again.') {
+  Swal.fire({
+    icon: 'warning',
+    title,
+    text,
+    customClass: swalCustomClass,
+    confirmButtonText: 'OK'
+  });
+}
+
 // --- 2. Form Validation & Submission ---
 function bindFormEvents() {
   const form = document.getElementById('preference-form');
@@ -224,7 +330,8 @@ function bindFormEvents() {
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
-    showAlert('', '');
+
+    if (isLoading) return;
 
     const job_keywords = document.getElementById('job_keywords').value.trim();
     const telegram_chat_id = document.getElementById('telegram_chat_id').value.trim();
@@ -238,35 +345,35 @@ function bindFormEvents() {
     const hiddenJobType = document.getElementById('job_type');
     if (hiddenJobType) hiddenJobType.value = job_type;
 
-    // Input Validation
+    // Input Validation using SweetAlert2
     if (!job_keywords) {
-      showAlert('error', '⚠️ Please enter at least one job keyword or title.');
+      showWarningAlert('Validation Warning', 'Please enter job keywords.');
       document.getElementById('job_keywords').focus();
       return;
     }
 
     if (!telegram_chat_id) {
-      showAlert('error', '⚠️ Please enter your Telegram Chat ID to receive job alerts.');
+      showWarningAlert('Validation Warning', 'Please enter your Telegram Chat ID.');
       document.getElementById('telegram_chat_id').focus();
       return;
     }
 
     if (!/^-?\d+$/.test(telegram_chat_id)) {
-      showAlert('error', '⚠️ Telegram Chat ID must be numeric (e.g. 987654321 or -1002630615047).');
+      showWarningAlert('Validation Warning', 'Please enter a valid numeric Telegram Chat ID.');
       document.getElementById('telegram_chat_id').focus();
       return;
     }
 
     if (!locationStr) {
-      showAlert('error', '⚠️ Please select or type at least one job location.');
+      showWarningAlert('Validation Warning', 'Please select at least one location.');
       document.getElementById('location-search-input').focus();
       return;
     }
 
+    showLoadingAlert();
+
     const submitBtn = form.querySelector('button[type="submit"]');
-    const originalText = submitBtn.innerHTML;
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '⚡ Launching Scraping Workflow...';
+    if (submitBtn) submitBtn.disabled = true;
 
     try {
       const res = await API.savePreference({
@@ -280,19 +387,29 @@ function bindFormEvents() {
         user_id: 'usr_' + telegram_chat_id.replace(/[^0-9]/g, '')
       });
 
-      if (res.success) {
-        showAlert('success', `✨ Preferences saved! PhantomBuster & n8n scraping launched for ${escapeHtml(job_keywords)} (Locations: ${escapeHtml(locationStr)}).`);
+      await ensureMinimumLoadingTime();
+
+      if (res.isNetworkError) {
+        showNetworkErrorAlert('Connection Failed', 'Please check your internet connection.');
+      } else if (res.isRateLimit) {
+        showRateLimitAlert('Too Many Requests', 'Please wait 5 minutes and try again.');
+      } else if (res.success) {
+        showSuccessAlert('Preferences Saved!', 'Your settings have been updated.');
         loadPreferences();
         loadLatestStatus();
         loadHistoryRuns();
       } else {
-        showAlert('error', `❌ Error saving preferences: ${escapeHtml(res.error)}`);
+        showErrorAlert('Something Went Wrong!', res.error || 'Please try again later.');
       }
     } catch (err) {
-      showAlert('error', `❌ Failed to communicate with server: ${err.message}`);
+      await ensureMinimumLoadingTime();
+      if (!navigator.onLine) {
+        showNetworkErrorAlert('Connection Failed', 'Please check your internet connection.');
+      } else {
+        showErrorAlert('Something Went Wrong!', 'Please try again later.');
+      }
     } finally {
-      submitBtn.disabled = false;
-      submitBtn.innerHTML = originalText;
+      if (submitBtn) submitBtn.disabled = false;
     }
   });
 }
@@ -312,18 +429,19 @@ function bindChipClickEvents() {
   });
 }
 
-// Helper: Alert Display
+// Helper: Alert Display (backwards compatibility)
 function showAlert(type, message) {
-  const banner = document.getElementById('alert-banner');
-  if (!banner) return;
-  if (!type) {
-    banner.style.display = 'none';
-    banner.className = 'alert-banner';
-    return;
+  if (type === 'success') {
+    showSuccessAlert('Preferences Saved!', message || 'Your settings have been updated.');
+  } else if (type === 'warning') {
+    showWarningAlert('Please fill in all required fields.', message || 'Some fields are missing or invalid.');
+  } else if (type === 'network') {
+    showNetworkErrorAlert('Connection Failed', message || 'Please check your internet connection.');
+  } else if (type === 'ratelimit') {
+    showRateLimitAlert('Too Many Requests', message || 'Please wait 5 minutes and try again.');
+  } else {
+    showErrorAlert('Something Went Wrong!', message || 'Please try again later.');
   }
-  banner.className = `alert-banner ${type}`;
-  banner.innerHTML = message;
-  banner.style.display = 'block';
 }
 
 // 4. System Connection Health Check
@@ -400,15 +518,19 @@ async function loadPreferences() {
         btn.innerHTML = '⏳ Triggering...';
         try {
           const res = await API.triggerManualSearch({ preferenceId: id });
-          if (res.success) {
-            showAlert('success', `🚀 Search triggered! Workflow status updated to Running.`);
+          if (res.isNetworkError) {
+            showNetworkErrorAlert('Connection Failed', 'Please check your internet connection.');
+          } else if (res.isRateLimit) {
+            showRateLimitAlert('Too Many Requests', 'Please wait 5 minutes and try again.');
+          } else if (res.success) {
+            showSuccessAlert('Scrape Triggered!', 'Your workflow run has been started.');
             loadLatestStatus();
             loadHistoryRuns();
           } else {
-            showAlert('error', `Failed to trigger search: ${res.error}`);
+            showErrorAlert('Something Went Wrong!', res.error || 'Please try again later.');
           }
         } catch (e) {
-          showAlert('error', `Error: ${e.message}`);
+          showErrorAlert('Something Went Wrong!', 'Please try again later.');
         } finally {
           btn.disabled = false;
           btn.innerHTML = '🚀 Run Scrape Now';

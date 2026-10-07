@@ -1,5 +1,6 @@
 const dbStore = require('../models/dbStore');
-const { buildLinkedInSearchUrl, triggerPhantomBusterScrape } = require('../services/phantombusterService');
+const { buildLinkedInSearchUrl } = require('../services/phantombusterService');
+const { dispatchJobSearch, normalizeSources } = require('../services/jobDispatcher');
 const { triggerN8nWebhook } = require('../services/n8nService');
 
 async function createPreference(req, res) {
@@ -12,6 +13,7 @@ async function createPreference(req, res) {
       job_type,
       work_type,
       job_posting_time,
+      job_source,
       user_id,
       user_email,
       auto_trigger
@@ -41,6 +43,9 @@ async function createPreference(req, res) {
     const formattedLocation = Array.isArray(location) ? location.map(l => String(l).trim()).filter(Boolean).join(', ') : location.trim();
     const formattedWorkType = Array.isArray(work_type) ? work_type.map(w => String(w).trim()).filter(Boolean).join(', ') : (work_type ? String(work_type).trim() : 'Remote, Hybrid, On-site');
     const formattedPostingTime = job_posting_time ? String(job_posting_time).trim() : 'any';
+    // Multi-select: array or comma-separated string -> normalized array; stored comma-separated
+    const formattedSources = normalizeSources(job_source);
+    const formattedSource = formattedSources.join(',');
 
     // Save Preference to DB (Supabase / Memory fallback)
     const preference = await dbStore.saveUserPreference({
@@ -52,21 +57,25 @@ async function createPreference(req, res) {
       experience_level: experience_level.trim(),
       job_type: job_type.trim(),
       work_type: formattedWorkType,
-      job_posting_time: formattedPostingTime
+      job_posting_time: formattedPostingTime,
+      job_source: formattedSource
     });
 
     // Optionally initiate initial scraping run automatically upon submission
     let searchRecord = null;
 
     if (auto_trigger !== false) {
-      const searchUrl = buildLinkedInSearchUrl({
-        keywords: preference.job_keywords,
-        location: preference.location,
-        experienceLevel: preference.experience_level,
-        jobType: preference.job_type,
-        workType: preference.work_type,
-        postingTime: preference.job_posting_time
-      });
+      // Search URL shown on the dashboard — source-aware (LinkedIn URL only for PhantomBuster-only)
+      const searchUrl = (formattedSources.length === 1 && formattedSources[0] === 'phantombuster')
+        ? buildLinkedInSearchUrl({
+            keywords: preference.job_keywords,
+            location: preference.location,
+            experienceLevel: preference.experience_level,
+            jobType: preference.job_type,
+            workType: preference.work_type,
+            postingTime: preference.job_posting_time
+          })
+        : `multi://${formattedSources.join('+')}/${encodeURIComponent(preference.job_keywords)} in ${encodeURIComponent(preference.location)}`;
 
       // Create Job Search Record with status 'Pending' -> 'Running'
       searchRecord = await dbStore.createJobSearch({
@@ -83,7 +92,7 @@ async function createPreference(req, res) {
         search_url: searchUrl
       });
 
-      // Trigger PhantomBuster & n8n workflow async
+      // Route to the user's chosen job sources (PhantomBuster / Adzuna / JSearch, multi-select)
       const payload = {
         searchId: searchRecord.id,
         userId: preference.user_id,
@@ -94,14 +103,15 @@ async function createPreference(req, res) {
         workType: preference.work_type,
         postingTime: preference.job_posting_time,
         telegramChatId: preference.telegram_chat_id,
-        searchUrl
+        searchUrl,
+        jobSource: formattedSources
       };
 
-      // Synchronously await PhantomBuster scrape launch
+      // Synchronously await the chosen sources' search dispatch
       try {
-        const pbRes = await triggerPhantomBusterScrape(payload);
-        console.log(`[Dashboard Trigger] PhantomBuster launch status:`, pbRes.success ? 'SUCCESS' : 'FAILED', pbRes);
-        if (!pbRes.success) {
+        const dispatchRes = await dispatchJobSearch(payload);
+        console.log(`[Dashboard Trigger] [${formattedSources.join(',')}] dispatch status:`, dispatchRes.success ? 'SUCCESS' : 'FAILED', (dispatchRes.errors || []).join(' | '));
+        if (!dispatchRes.success) {
           await triggerN8nWebhook(payload);
         }
       } catch (err) {

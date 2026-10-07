@@ -69,6 +69,7 @@ async function saveUserPreference(prefData) {
     job_type: prefData.job_type,
     work_type: prefData.work_type || 'Remote, Hybrid, On-site',
     job_posting_time: prefData.job_posting_time || 'any',
+    job_source: prefData.job_source || 'phantombuster',
     is_active: true
   };
 
@@ -87,12 +88,13 @@ async function saveUserPreference(prefData) {
       const fallbackPayload = { ...insertPayload };
       delete fallbackPayload.work_type;
       delete fallbackPayload.job_posting_time;
+      delete fallbackPayload.job_source;
       const { data, error } = await supabase
         .from('user_preferences')
         .insert([fallbackPayload])
         .select();
       if (error) throw error;
-      return { ...data[0], work_type: insertPayload.work_type, job_posting_time: insertPayload.job_posting_time };
+      return { ...data[0], work_type: insertPayload.work_type, job_posting_time: insertPayload.job_posting_time, job_source: insertPayload.job_source };
     }
   } else {
     const newPref = {
@@ -170,7 +172,7 @@ async function createJobSearch(searchData) {
         .insert([fallbackPayload])
         .select();
       if (error) throw error;
-      return { ...data[0], work_type: insertPayload.work_type, job_posting_time: insertPayload.job_posting_time };
+      return { ...data[0], work_type: insertPayload.work_type, job_posting_time: insertPayload.job_posting_time, job_source: insertPayload.job_source };
     }
   } else {
     const newSearch = {

@@ -131,6 +131,29 @@
                   <option value="r3600">Last 1 hour</option>
                 </select>
               </div>
+
+              <!-- Job Sources (multi-select) -->
+              <div class="form-group">
+                <label class="form-label">🔌 Job Sources <span class="required-star">*</span> <span style="font-weight:400;font-size:0.75rem;">(ek ya zyada select karo)</span></label>
+                <div class="source-cards-row" id="job_source_group">
+                  <label class="source-card">
+                    <input type="checkbox" name="job_source" value="phantombuster" checked>
+                    <span class="source-card-title">🕵️ PhantomBuster</span>
+                    <span class="source-card-desc">LinkedIn jobs via automation</span>
+                  </label>
+                  <label class="source-card">
+                    <input type="checkbox" name="job_source" value="adzuna">
+                    <span class="source-card-title">📊 Adzuna</span>
+                    <span class="source-card-desc">Official jobs API · stable</span>
+                  </label>
+                  <label class="source-card">
+                    <input type="checkbox" name="job_source" value="jsearch">
+                    <span class="source-card-title">⚡ JSearch</span>
+                    <span class="source-card-desc">LinkedIn + Indeed aggregated</span>
+                  </label>
+                </div>
+                <div class="form-hint" id="job_source_hint">Teeno select karoge to teeno parallel chalenge aur jobs merge hokar aayengi.</div>
+              </div>
             </div>
 
             <!-- Right Sub-column -->

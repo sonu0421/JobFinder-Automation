@@ -25,12 +25,16 @@ async function triggerN8nWebhook(payload) {
   }
 
   try {
+    // n8n holds the POST open until the whole workflow finishes (no "Respond to
+    // Webhook" node + 16s Wait per job), so the timeout must be generous.
+    // Without it, a hung workflow freezes the poller silently.
     const response = await fetch(urlWithParams.toString(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(600000) // 10 minutes
     });
 
     const textData = await response.text();

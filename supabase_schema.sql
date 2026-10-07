@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS public.user_preferences (
     job_type TEXT NOT NULL,
     work_type TEXT DEFAULT 'Remote, Hybrid, On-site',
     job_posting_time TEXT DEFAULT 'any',
+    job_source TEXT DEFAULT 'phantombuster',
     is_active BOOLEAN NOT NULL DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -22,6 +23,7 @@ CREATE TABLE IF NOT EXISTS public.user_preferences (
 -- Migrations for existing tables:
 ALTER TABLE public.user_preferences ADD COLUMN IF NOT EXISTS work_type TEXT DEFAULT 'Remote, Hybrid, On-site';
 ALTER TABLE public.user_preferences ADD COLUMN IF NOT EXISTS job_posting_time TEXT DEFAULT 'any';
+ALTER TABLE public.user_preferences ADD COLUMN IF NOT EXISTS job_source TEXT DEFAULT 'phantombuster';
 
 -- Index for searching preferences by user_id or active status
 CREATE INDEX IF NOT EXISTS idx_user_preferences_user_id ON public.user_preferences(user_id);

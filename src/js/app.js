@@ -30,6 +30,7 @@ function initApp() {
   bindFormEvents();
   bindChipClickEvents();
   bindNavTabs();
+  bindJobSourceHint();
   checkSystemStatus();
   loadPreferences();
   loadLatestStatus();
@@ -42,8 +43,24 @@ function initApp() {
   }, 5000);
 }
 
-function bindNavTabs() {
-  const allNavLinks = document.querySelectorAll('.sidebar-menu .menu-item, .mobile-bottom-nav .mobile-tab');
+// Job Source selector: update the hint text under the cards when selection changes
+function bindJobSourceHint() {
+  const hintEl = document.getElementById('job_source_hint');
+  const boxes = document.querySelectorAll('input[name="job_source"]');
+  if (!hintEl || !boxes.length) return;
+  const update = () => {
+    const n = document.querySelectorAll('input[name="job_source"]:checked').length;
+    hintEl.textContent = n === 0
+      ? 'Kam se kam ek source select karo.'
+      : n === 1
+        ? 'Sirf ye source chalega.'
+        : `${n} sources select hain — sab parallel chalenge, jobs merge hokar ek saath aayengi.`;
+  };
+  boxes.forEach(b => b.addEventListener('change', update));
+  update();
+}
+
+function bindNavTabs() {  const allNavLinks = document.querySelectorAll('.sidebar-menu .menu-item, .mobile-bottom-nav .mobile-tab');
 
   allNavLinks.forEach(link => {
     link.addEventListener('click', (e) => {
@@ -340,6 +357,7 @@ function bindFormEvents() {
     const job_posting_time = document.getElementById('job_posting_time').value;
     const experience_level = document.getElementById('experience_level').value || 'Fresher';
     const job_type = getSelectedJobTypes();
+    const job_sources = Array.from(document.querySelectorAll('input[name="job_source"]:checked')).map(el => el.value);
     
     // Sync hidden input value for job_type
     const hiddenJobType = document.getElementById('job_type');
@@ -370,6 +388,11 @@ function bindFormEvents() {
       return;
     }
 
+    if (job_sources.length === 0) {
+      showWarningAlert('Validation Warning', 'Please select at least one job source (PhantomBuster / Adzuna / JSearch).');
+      return;
+    }
+
     showLoadingAlert();
 
     const submitBtn = form.querySelector('button[type="submit"]');
@@ -384,6 +407,7 @@ function bindFormEvents() {
         job_posting_time,
         experience_level,
         job_type,
+        job_source: job_sources,
         user_id: 'usr_' + telegram_chat_id.replace(/[^0-9]/g, '')
       });
 
@@ -489,11 +513,15 @@ async function loadPreferences() {
     container.innerHTML = res.preferences.map(pref => {
       const wtStr = pref.work_type || 'Remote, Hybrid, On-site';
       const ptStr = POSTING_TIME_LABELS[pref.job_posting_time] || pref.job_posting_time || 'Any time';
+      const sourceLabels = { phantombuster: '🕵️ PhantomBuster', adzuna: '📊 Adzuna', jsearch: '⚡ JSearch' };
+      const srcList = String(pref.job_source || 'phantombuster').split(',').map(s => s.trim()).filter(Boolean);
+      const srcStr = srcList.map(s => sourceLabels[s] || s).join(' + ') || sourceLabels.phantombuster;
 
       return `
         <div class="pref-card">
           <div class="pref-title">🎯 ${escapeHtml(pref.job_keywords)}</div>
           <div class="pref-meta">
+            <div class="meta-item">🔌 <strong>Source:</strong> ${escapeHtml(srcStr)}</div>
             <div class="meta-item">📍 <strong>Location:</strong> ${escapeHtml(pref.location)}</div>
             <div class="meta-item">🌐 <strong>Work Type:</strong> ${escapeHtml(wtStr)}</div>
             <div class="meta-item">⏱️ <strong>Posted:</strong> ${escapeHtml(ptStr)}</div>

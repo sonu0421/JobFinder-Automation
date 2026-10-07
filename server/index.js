@@ -6,7 +6,8 @@ require('dotenv').config();
 const apiRoutes = require('./routes/api');
 const { initScheduler } = require('./services/schedulerService');
 const dbStore = require('./models/dbStore');
-const { buildLinkedInSearchUrl, triggerPhantomBusterScrape } = require('./services/phantombusterService');
+const { buildLinkedInSearchUrl } = require('./services/phantombusterService');
+const { dispatchJobSearch } = require('./services/jobDispatcher');
 const { triggerN8nWebhook } = require('./services/n8nService');
 
 const app = express();
@@ -83,14 +84,18 @@ initScheduler(async () => {
 
     for (const pref of activePrefs) {
       console.log(`[Automated Cycle] Processing User: ${pref.user_id} (${pref.job_keywords} in ${pref.location}) -> Telegram: ${pref.telegram_chat_id}`);
-      const searchUrl = buildLinkedInSearchUrl({
-        keywords: pref.job_keywords,
-        location: pref.location,
-        experienceLevel: pref.experience_level,
-        jobType: pref.job_type,
-        workType: pref.work_type,
-        postingTime: pref.job_posting_time
-      });
+      const { normalizeSources } = require('./services/jobDispatcher');
+      const jobSources = normalizeSources(pref.job_source);
+      const searchUrl = (jobSources.length === 1 && jobSources[0] === 'phantombuster')
+        ? buildLinkedInSearchUrl({
+            keywords: pref.job_keywords,
+            location: pref.location,
+            experienceLevel: pref.experience_level,
+            jobType: pref.job_type,
+            workType: pref.work_type,
+            postingTime: pref.job_posting_time
+          })
+        : `multi://${jobSources.join('+')}/${encodeURIComponent(pref.job_keywords)} in ${encodeURIComponent(pref.location)}`;
 
       const searchRecord = await dbStore.createJobSearch({
         preference_id: pref.id,
@@ -116,10 +121,11 @@ initScheduler(async () => {
         workType: pref.work_type,
         postingTime: pref.job_posting_time,
         telegramChatId: pref.telegram_chat_id,
-        searchUrl
+        searchUrl,
+        jobSource: jobSources
       };
 
-      triggerPhantomBusterScrape(payload)
+      dispatchJobSearch(payload)
         .then(async (res) => {
           if (!res.success) await triggerN8nWebhook(payload);
         })

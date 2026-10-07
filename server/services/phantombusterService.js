@@ -288,11 +288,17 @@ async function pollPhantomContainerAndNotify({ containerId, searchId, userId, te
     await new Promise(resolve => setTimeout(resolve, 10000)); // wait 10 seconds between polls
 
     try {
+      // NOTE: fetch has NO default timeout in Node — without this, a stalled
+      // API call hangs the poller forever with zero logging.
       const res = await fetch(`https://api.phantombuster.com/api/v2/containers/fetch?id=${containerId}`, {
-        headers: { 'x-phantombuster-key': apiKey }
+        headers: { 'x-phantombuster-key': apiKey },
+        signal: AbortSignal.timeout(20000) // 20s per poll attempt
       });
 
-      if (!res.ok) continue;
+      if (!res.ok) {
+        console.warn(`[PhantomBuster Poller] Attempt ${attempt}: HTTP ${res.status} from container API — retrying...`);
+        continue;
+      }
 
       const containerData = await res.json();
       const status = containerData.status;
@@ -332,17 +338,20 @@ async function pollPhantomContainerAndNotify({ containerId, searchId, userId, te
         }
 
         // Send enriched jobs to n8n webhook with telegramChatId guaranteed!
+        // resultObject MUST be a JSON *string* — the workflow's Code2 node runs
+        // JSON.parse($json.body.resultObject). Sending an array breaks it.
         const n8nPayload = {
           searchId,
           userId,
           telegramChatId,
           searchUrl,
           jobs: enrichedJobs,
-          resultObject: enrichedJobs
+          resultObject: JSON.stringify(enrichedJobs)
         };
 
+        console.log(`[PhantomBuster Poller] Dispatching ${enrichedJobs.length} jobs to n8n webhook...`);
         const n8nRes = await triggerN8nWebhook(n8nPayload);
-        console.log(`[PhantomBuster Poller] Successfully dispatched ${enrichedJobs.length} jobs to n8n webhook. Status: ${n8nRes.status}`);
+        console.log(`[PhantomBuster Poller] n8n dispatch done. Status: ${n8nRes.status}, success: ${n8nRes.success}${n8nRes.error ? ', error: ' + n8nRes.error : ''}`);
 
         return;
       }
@@ -352,6 +361,18 @@ async function pollPhantomContainerAndNotify({ containerId, searchId, userId, te
   }
 
   console.warn(`[PhantomBuster Poller] Container ${containerId} monitoring timed out after 5 minutes.`);
+
+  // Mark the search record so the dashboard doesn't stay "Running" forever
+  if (searchId) {
+    try {
+      await dbStore.updateJobSearchStatus(searchId, {
+        status: 'Failed',
+        error_message: 'Scrape poller timed out after 5 minutes (container status unknown).'
+      });
+    } catch (e) {
+      console.warn('[PhantomBuster Poller] Could not mark search as failed:', e.message);
+    }
+  }
 }
 
 module.exports = {

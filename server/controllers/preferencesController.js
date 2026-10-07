@@ -1,6 +1,6 @@
 const dbStore = require('../models/dbStore');
 const { buildLinkedInSearchUrl } = require('../services/phantombusterService');
-const { dispatchJobSearch, normalizeSources } = require('../services/jobDispatcher');
+const { dispatchJobSearch, normalizeSources, buildNoResultPayload } = require('../services/jobDispatcher');
 const { triggerN8nWebhook } = require('../services/n8nService');
 
 async function createPreference(req, res) {
@@ -112,11 +112,31 @@ async function createPreference(req, res) {
         const dispatchRes = await dispatchJobSearch(payload);
         console.log(`[Dashboard Trigger] [${formattedSources.join(',')}] dispatch status:`, dispatchRes.success ? 'SUCCESS' : 'FAILED', (dispatchRes.errors || []).join(' | '));
         if (!dispatchRes.success) {
-          await triggerN8nWebhook(payload);
+          // Total failure: send the designed "No Result Found" payload so n8n
+          // takes the Telegram1 path instead of crashing on a missing resultObject.
+          await triggerN8nWebhook(buildNoResultPayload({
+            searchId: payload.searchId,
+            userId: payload.userId,
+            telegramChatId: payload.telegramChatId,
+            searchUrl: payload.searchUrl,
+            keywords: payload.keywords,
+            location: payload.location,
+            sources: formattedSources,
+            reason: `Search failed (${(dispatchRes.errors || []).join('; ')})`.slice(0, 300)
+          }));
         }
       } catch (err) {
         console.warn('[Auto-trigger error fallback to n8n webhook]:', err.message);
-        await triggerN8nWebhook(payload);
+        await triggerN8nWebhook(buildNoResultPayload({
+          searchId: payload.searchId,
+          userId: payload.userId,
+          telegramChatId: payload.telegramChatId,
+          searchUrl: payload.searchUrl,
+          keywords: payload.keywords,
+          location: payload.location,
+          sources: formattedSources,
+          reason: `Search failed: ${err.message}`.slice(0, 300)
+        }));
       }
     }
 

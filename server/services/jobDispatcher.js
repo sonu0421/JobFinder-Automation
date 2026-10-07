@@ -40,9 +40,24 @@ function normalizeSources(jobSource) {
   return valid.length ? valid : ['phantombuster'];
 }
 
+// Build a payload that takes n8n's designed "No Result Found" path:
+// a single item with an `error` field -> Code2 -> Convert -> If2(false) -> Telegram1.
+function buildNoResultPayload({ searchId, userId, telegramChatId, searchUrl, keywords, location, sources, reason }) {
+  const where = Array.isArray(location) ? location.join(', ') : String(location || 'India').trim();
+  const srcLabel = sources && sources.length ? ` (${sources.join(', ')})` : '';
+  return {
+    searchId,
+    userId: userId || 'usr_default',
+    telegramChatId,
+    searchUrl: searchUrl || '',
+    jobs: [],
+    resultObject: JSON.stringify([{
+      error: reason || `No jobs found for "${keywords}" in ${where}${srcLabel}`
+    }])
+  };
+}
 // Normalize a job URL for dedup: lowercase, strip query/fragment/trailing slash.
-function normalizeUrl(url) {
-  if (!url) return '';
+function normalizeUrl(url) {  if (!url) return '';
   return String(url).toLowerCase().split('?')[0].split('#')[0].replace(/\/$/, '');
 }
 
@@ -133,7 +148,25 @@ async function dispatchJobSearch(params) {
       console.log(`[Dispatcher] n8n dispatch done. success: ${n8nRes.success}${n8nRes.error ? ', error: ' + n8nRes.error : ''}`);
       if (!n8nRes.success) summary.errors.push(`n8n: ${n8nRes.error}`);
     } else {
-      console.log('[Dispatcher] API sources returned 0 jobs — nothing to dispatch.');
+      // Zero jobs from API sources: send the designed "No Result Found" payload
+      // (single error item) so n8n flows Code2 -> Convert -> If2(false) -> Telegram1
+      // instead of crashing in Convert on a missing resultObject.
+      const dbStore = require('../models/dbStore');
+      if (searchId) {
+        try {
+          await dbStore.updateJobSearchStatus(searchId, { status: 'Completed', jobs_found: 0, jobs_sent: 0 });
+        } catch (e) { console.warn('[Dispatcher] DB update failed:', e.message); }
+      }
+      const where = Array.isArray(location) ? location.join(', ') : String(location || 'India').trim();
+      const n8nPayload = buildNoResultPayload({
+        searchId, userId, telegramChatId,
+        searchUrl: `multi://${apiSources.join('+')}/what=${encodeURIComponent(String(keywords))}&where=${encodeURIComponent(where)}`,
+        keywords, location, sources: apiSources
+      });
+      console.log('[Dispatcher] 0 jobs found — dispatching "No Result Found" payload to n8n...');
+      const n8nRes = await triggerN8nWebhook(n8nPayload);
+      summary.apiDispatched = n8nRes.success;
+      if (!n8nRes.success) summary.errors.push(`n8n: ${n8nRes.error}`);
     }
   }
 
@@ -163,5 +196,6 @@ module.exports = {
   normalizeSource,
   normalizeSources,
   dedupeJobs,
+  buildNoResultPayload,
   VALID_SOURCES
 };

@@ -127,10 +127,32 @@ initScheduler(async () => {
 
       dispatchJobSearch(payload)
         .then(async (res) => {
-          if (!res.success) await triggerN8nWebhook(payload);
+          if (!res.success) {
+            const { buildNoResultPayload } = require('./services/jobDispatcher');
+            await triggerN8nWebhook(buildNoResultPayload({
+              searchId: payload.searchId,
+              userId: payload.userId,
+              telegramChatId: payload.telegramChatId,
+              searchUrl: payload.searchUrl,
+              keywords: payload.keywords,
+              location: payload.location,
+              sources: jobSources,
+              reason: `Search failed (${(res.errors || []).join('; ')})`.slice(0, 300)
+            }));
+          }
         })
-        .catch(async () => {
-          await triggerN8nWebhook(payload);
+        .catch(async (err) => {
+          const { buildNoResultPayload } = require('./services/jobDispatcher');
+          await triggerN8nWebhook(buildNoResultPayload({
+            searchId: payload.searchId,
+            userId: payload.userId,
+            telegramChatId: payload.telegramChatId,
+            searchUrl: payload.searchUrl,
+            keywords: payload.keywords,
+            location: payload.location,
+            sources: jobSources,
+            reason: `Search failed: ${err?.message || err}`.slice(0, 300)
+          }));
         });
     }
   } catch (err) {

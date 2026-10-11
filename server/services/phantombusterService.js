@@ -57,10 +57,16 @@ function buildLinkedInSearchUrl({ keywords, location, experienceLevel, jobType, 
 
       const locJoined = formattedLocs.join(', ');
       const locationStr = locJoined.toLowerCase().includes('india') ? locJoined : `${locJoined}, India`;
-      params.append('location', locationStr);
 
+      // FIX (2026-10-12): Send ONLY geoId, never the free-text `location` param alongside it.
+      // LinkedIn's page JS re-resolves location from the text; if the text doesn't exactly
+      // match LinkedIn's canonical name for the geoId (e.g. "Delhi, India" vs "Delhi, Delhi, India"),
+      // LinkedIn silently DROPS the location filter -> jobs from all states. geoId alone works.
       if (geoIds.length > 0) {
         params.append('geoId', geoIds.join(','));
+      } else {
+        // Fallback: no geoId matched, use text location as last resort
+        params.append('location', locationStr);
       }
     }
   }
